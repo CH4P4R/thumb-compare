@@ -1,0 +1,25 @@
+{
+  "crons": [
+    {
+      "path": "/api/jobs/trending",
+      "schedule": "0 */12 * * *",
+      "headers": [
+        {
+          "key": "Authorization",
+          "value": "Bearer ${JOB_SECRET}"
+        }
+      ]
+    },
+    {
+      "path": "/api/jobs/competitors",
+      "schedule": "0 0 * * *",
+      "headers": [
+        {
+          "key": "Authorization",
+          "value": "Bearer ${JOB_SECRET}"
+        }
+      ]
+    }
+  ]
+}
+

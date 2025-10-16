@@ -1,0 +1,175 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String          @id @default(cuid())
+  email         String          @unique
+  name          String?
+  avatarUrl     String?
+  createdAt     DateTime        @default(now())
+  projects      Project[]
+  members       ProjectMember[]
+  annotations   Annotation[]
+  comments      Comment[]
+  subscriptions Subscription[]
+}
+
+model Project {
+  id           String              @id @default(cuid())
+  ownerId      String
+  owner        User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name         String
+  slug         String              @unique
+  regionCode   String              @default("TR")
+  createdAt    DateTime            @default(now())
+  members      ProjectMember[]
+  thumbnails   Thumbnail[]
+  competitors  CompetitorChannel[]
+  trending     TrendingVideo[]
+  annotations  Annotation[]
+  comments     Comment[]
+  shareLinks   ShareLink[]
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  role      String // 'owner', 'editor', 'viewer'
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}
+
+model Thumbnail {
+  id            String   @id @default(cuid())
+  projectId     String
+  title         String
+  storagePath   String
+  width         Int
+  height        Int
+  avgBrightness Float?
+  contrast      Float?
+  textRatio     Float?
+  faceDetected  Boolean? @default(false)
+  score         Float?
+  createdAt     DateTime @default(now())
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model CompetitorChannel {
+  id           String            @id @default(cuid())
+  projectId    String
+  ytChannelId  String
+  channelTitle String?
+  addedBy      String?
+  createdAt    DateTime          @default(now())
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  videos       CompetitorVideo[]
+
+  @@unique([projectId, ytChannelId])
+}
+
+model CompetitorVideo {
+  id             String            @id @default(cuid())
+  competitorId   String
+  ytVideoId      String            @unique
+  title          String
+  thumbnailUrl   String
+  publishedAt    DateTime
+  viewCount      Int?
+  likeCount      Int?
+  commentCount   Int?
+  fetchedAt      DateTime          @default(now())
+  competitor     CompetitorChannel @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+}
+
+model TrendingVideo {
+  id           String   @id @default(cuid())
+  projectId    String
+  regionCode   String
+  ytVideoId    String
+  title        String
+  thumbnailUrl String
+  channelTitle String
+  publishedAt  DateTime
+  viewCount    Int?
+  likeCount    Int?
+  fetchedAt    DateTime @default(now())
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, regionCode, ytVideoId])
+}
+
+model Annotation {
+  id         String   @id @default(cuid())
+  projectId  String
+  targetType String // 'thumbnail', 'competitor', 'trending'
+  targetRef  String // ID of the target
+  authorId   String
+  dataJson   Json // tldraw JSON data
+  createdAt  DateTime @default(now())
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  projectId  String
+  targetType String // 'thumbnail', 'competitor', 'trending'
+  targetRef  String // ID of the target
+  authorId   String
+  text       String
+  createdAt  DateTime @default(now())
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model ShareLink {
+  id          String    @id @default(cuid())
+  projectId   String
+  token       String    @unique
+  permissions String    @default("view") // 'view', 'comment'
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Plan {
+  id            String         @id @default(cuid())
+  name          String         @unique
+  limits        Json // { max_projects, max_thumbnails, max_competitors, regions }
+  createdAt     DateTime       @default(now())
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  userId           String
+  planId           String
+  status           String // 'active', 'canceled', 'expired'
+  currentPeriodEnd DateTime
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan             Plan     @relation(fields: [planId], references: [id])
+}
+
+model JobLog {
+  id        String   @id @default(cuid())
+  type      String // 'trending_fetch', 'competitor_refresh'
+  status    String // 'queued', 'ok', 'error'
+  detail    Json
+  createdAt DateTime @default(now())
+}
+
