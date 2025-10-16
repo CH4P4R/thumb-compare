@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { analyzeThumbnail } from "@/lib/score";
+import { analyzeWithAI } from "@/lib/ai/vision-analyzer";
 import { writeFile, unlink } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -50,8 +51,29 @@ export async function POST(request: Request, { params }: { params: { id: string 
     await writeFile(tempPath, buffer);
 
     try {
-      // Analyze thumbnail
+      // Analyze thumbnail with traditional methods
       const scores = await analyzeThumbnail(tempPath);
+
+      // Get public URL for AI analysis
+      const { data: publicUrlData } = supabase.storage
+        .from("thumbnails")
+        .getPublicUrl(thumbnail.storagePath);
+
+      // AI Analysis (optional - requires OpenAI API key)
+      let aiAnalysis = null;
+      if (process.env.OPENAI_API_KEY) {
+        try {
+          aiAnalysis = await analyzeWithAI(publicUrlData.publicUrl);
+        } catch (aiError) {
+          console.warn("AI analysis failed:", aiError);
+          // Continue without AI analysis
+        }
+      }
+
+      // Combine scores
+      const finalScore = aiAnalysis?.clickworthiness 
+        ? (scores.score * 0.6 + aiAnalysis.clickworthiness * 0.4) 
+        : scores.score;
 
       // Update database
       const updated = await prisma.thumbnail.update({
@@ -60,15 +82,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
           avgBrightness: scores.avgBrightness,
           contrast: scores.contrast,
           textRatio: scores.textRatio,
-          faceDetected: scores.faceDetected,
-          score: scores.score,
+          faceDetected: aiAnalysis?.faceDetected ?? scores.faceDetected,
+          score: finalScore,
         },
       });
 
       // Clean up temp file
       await unlink(tempPath);
 
-      return NextResponse.json(updated);
+      return NextResponse.json({
+        ...updated,
+        aiAnalysis, // Include AI insights
+      });
     } catch (analysisError) {
       // Clean up temp file on error
       await unlink(tempPath).catch(() => {});
